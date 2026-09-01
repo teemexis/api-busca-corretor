@@ -2,6 +2,7 @@ import asyncio
 import logging
 import os
 import re
+from typing import Optional
 
 from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 from playwright.async_api import async_playwright
@@ -138,26 +139,119 @@ async def _run_single_attempt(
         await browser.close()
 
 
+async def _attempt_search_with_token(page, formatted_cpf: str, token: str) -> dict:
+    await page.goto(SEARCH_URL, wait_until="networkidle", timeout=45000)
+    await page.fill("#CPF", formatted_cpf)
+
+    async with page.expect_navigation(timeout=45000):
+        await page.evaluate(
+            """(token) => {
+                if (typeof onSubmit === "function") {
+                    onSubmit(token);
+                    return;
+                }
+                document.getElementById("ReCAPTCHAToken").value = token;
+                document.getElementById("IsFinding").value = "True";
+                document.getElementById("buscaCorretoresForm").submit();
+            }""",
+            token,
+        )
+
+    await page.wait_for_load_state("networkidle", timeout=45000)
+
+    if RESULTS_URL not in page.url:
+        logger.warning("Token externo nao redirecionou. URL atual: %s", page.url)
+        return {"found": False, "reason": "no_results_page"}
+
+    names = [
+        name.strip()
+        for name in await page.locator(NAME_SELECTOR).all_text_contents()
+        if name.strip()
+    ]
+
+    if not names:
+        return {"found": False, "reason": "empty_results"}
+
+    return {
+        "found": True,
+        "cpf": formatted_cpf,
+        "nome": names[0],
+        "message": "Corretor encontrado",
+    }
+
+
+async def _run_token_attempt(
+    playwright,
+    formatted_cpf: str,
+    token: str,
+    user_agent: Optional[str],
+    headless: bool,
+) -> dict:
+    browser = await playwright.chromium.launch(**_browser_launch_options(headless))
+    context = await browser.new_context(
+        user_agent=user_agent or USER_AGENT,
+        locale="pt-BR",
+        viewport={"width": 1280, "height": 720},
+    )
+    await context.add_init_script(
+        'Object.defineProperty(navigator, "webdriver", {get: () => undefined});'
+    )
+    page = await context.new_page()
+
+    try:
+        return await _attempt_search_with_token(page, formatted_cpf, token)
+    finally:
+        await context.close()
+        await browser.close()
+
+
 async def search_broker_by_cpf(cpf: str) -> dict:
     formatted_cpf = normalize_cpf(cpf)
 
     if os.getenv("CAPSOLVER_API_KEY") or os.getenv("TWOCAPTCHA_API_KEY"):
-        from app.captcha import solve_recaptcha
+        from app.captcha import iter_captcha_solutions
         from app.http_search import search_broker_by_cpf_http
 
-        logger.info("Usando busca HTTP com captcha solver para CPF %s", formatted_cpf)
-        try:
-            solution = await solve_recaptcha()
-            result = await search_broker_by_cpf_http(formatted_cpf, solution=solution)
-            if result.get("found"):
-                return result
-            logger.warning("Primeira tentativa HTTP falhou, tentando novo token")
-            solution = await solve_recaptcha()
-            return await search_broker_by_cpf_http(formatted_cpf, solution=solution)
-        except Exception as exc:
-            logger.warning("Busca HTTP falhou: %s", exc)
-            if os.getenv("DOCKER", "false").lower() != "true":
-                logger.info("Tentando fallback Playwright")
+        logger.info("Usando captcha solver para CPF %s", formatted_cpf)
+
+        async with _browser_lock:
+            async with async_playwright() as playwright:
+                async for solution in iter_captcha_solutions():
+                    logger.info("Testando token via HTTP")
+                    try:
+                        result = await search_broker_by_cpf_http(
+                            formatted_cpf, solution=solution
+                        )
+                        if result.get("found"):
+                            return result
+                    except Exception as exc:
+                        logger.warning("HTTP com token falhou: %s", exc)
+
+                    for headless in (_default_headless(), not _default_headless()):
+                        logger.info(
+                            "Testando token via Playwright (headless=%s)", headless
+                        )
+                        try:
+                            result = await _run_token_attempt(
+                                playwright,
+                                formatted_cpf,
+                                solution.token,
+                                solution.user_agent,
+                                headless=headless,
+                            )
+                            if result.get("found"):
+                                return result
+                        except PlaywrightTimeoutError as exc:
+                            logger.warning("Playwright com token timeout: %s", exc)
+                        except Exception as exc:
+                            logger.warning("Playwright com token falhou: %s", exc)
+
+        return {
+            "found": False,
+            "cpf": formatted_cpf,
+            "nome": None,
+            "message": "Nenhum corretor encontrado para este CPF",
+        }
 
     return await _search_broker_with_playwright(formatted_cpf)
 

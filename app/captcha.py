@@ -2,7 +2,7 @@ import asyncio
 import logging
 import os
 from dataclasses import dataclass
-from typing import Callable, Optional
+from typing import Callable, List, Optional
 
 import httpx
 
@@ -103,7 +103,19 @@ async def _solve_with_capsolver_task(api_key: str, task: dict) -> CaptchaSolutio
 
 
 async def _solve_with_capsolver(api_key: str) -> CaptchaSolution:
-    task_types = [
+    last_error: Optional[Exception] = None
+    for task in _capsolver_tasks():
+        try:
+            return await _solve_with_capsolver_task(api_key, task)
+        except Exception as exc:
+            last_error = exc
+            logger.warning("CapSolver falhou com %s: %s", task["type"], exc)
+
+    raise RuntimeError(f"CapSolver nao conseguiu resolver captcha: {last_error}")
+
+
+def _capsolver_tasks() -> list[dict]:
+    return [
         {
             "type": "ReCaptchaV3EnterpriseTaskProxyLess",
             "websiteURL": SEARCH_URL,
@@ -123,15 +135,25 @@ async def _solve_with_capsolver(api_key: str) -> CaptchaSolution:
         },
     ]
 
-    last_error: Optional[Exception] = None
-    for task in task_types:
-        try:
-            return await _solve_with_capsolver_task(api_key, task)
-        except Exception as exc:
-            last_error = exc
-            logger.warning("CapSolver falhou com %s: %s", task["type"], exc)
 
-    raise RuntimeError(f"CapSolver nao conseguiu resolver captcha: {last_error}")
+async def iter_captcha_solutions():
+    capsolver_key = _capsolver_key()
+    if capsolver_key:
+        for task in _capsolver_tasks():
+            try:
+                yield await _solve_with_capsolver_task(capsolver_key, task)
+            except Exception as exc:
+                logger.warning("CapSolver falhou com %s: %s", task["type"], exc)
+        return
+
+    twocaptcha_key = _twocaptcha_key()
+    if twocaptcha_key:
+        yield await _solve_with_twocaptcha(twocaptcha_key)
+        return
+
+    raise RuntimeError(
+        "Configure CAPSOLVER_API_KEY ou TWOCAPTCHA_API_KEY nas variaveis de ambiente"
+    )
 
 
 async def _solve_with_twocaptcha(api_key: str) -> CaptchaSolution:
