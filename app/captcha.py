@@ -114,13 +114,12 @@ async def _solve_with_capsolver(api_key: str) -> CaptchaSolution:
     raise RuntimeError(f"CapSolver nao conseguiu resolver captcha: {last_error}")
 
 
-def _capsolver_tasks() -> list[dict]:
+def _capsolver_tasks() -> List[dict]:
     return [
         {
-            "type": "ReCaptchaV3EnterpriseTaskProxyLess",
+            "type": "ReCaptchaV2EnterpriseTaskProxyLess",
             "websiteURL": SEARCH_URL,
             "websiteKey": RECAPTCHA_SITE_KEY,
-            "pageAction": RECAPTCHA_ACTION,
         },
         {
             "type": "ReCaptchaV2EnterpriseTaskProxyLess",
@@ -129,9 +128,10 @@ def _capsolver_tasks() -> list[dict]:
             "isInvisible": True,
         },
         {
-            "type": "ReCaptchaV2EnterpriseTaskProxyLess",
+            "type": "ReCaptchaV3EnterpriseTaskProxyLess",
             "websiteURL": SEARCH_URL,
             "websiteKey": RECAPTCHA_SITE_KEY,
+            "pageAction": RECAPTCHA_ACTION,
         },
     ]
 
