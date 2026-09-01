@@ -141,12 +141,19 @@ async def _run_single_attempt(
 async def search_broker_by_cpf(cpf: str) -> dict:
     formatted_cpf = normalize_cpf(cpf)
 
-    if os.getenv("TWOCAPTCHA_API_KEY"):
+    if os.getenv("CAPSOLVER_API_KEY") or os.getenv("TWOCAPTCHA_API_KEY"):
+        from app.captcha import solve_recaptcha
         from app.http_search import search_broker_by_cpf_http
 
-        logger.info("Usando busca HTTP com 2Captcha para CPF %s", formatted_cpf)
+        logger.info("Usando busca HTTP com captcha solver para CPF %s", formatted_cpf)
         try:
-            return await search_broker_by_cpf_http(formatted_cpf)
+            solution = await solve_recaptcha()
+            result = await search_broker_by_cpf_http(formatted_cpf, solution=solution)
+            if result.get("found"):
+                return result
+            logger.warning("Primeira tentativa HTTP falhou, tentando novo token")
+            solution = await solve_recaptcha()
+            return await search_broker_by_cpf_http(formatted_cpf, solution=solution)
         except Exception as exc:
             logger.warning("Busca HTTP falhou: %s", exc)
             if os.getenv("DOCKER", "false").lower() != "true":
