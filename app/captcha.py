@@ -120,18 +120,7 @@ def _capsolver_tasks() -> List[dict]:
             "type": "ReCaptchaV2EnterpriseTaskProxyLess",
             "websiteURL": SEARCH_URL,
             "websiteKey": RECAPTCHA_SITE_KEY,
-        },
-        {
-            "type": "ReCaptchaV2EnterpriseTaskProxyLess",
-            "websiteURL": SEARCH_URL,
-            "websiteKey": RECAPTCHA_SITE_KEY,
-            "isInvisible": True,
-        },
-        {
-            "type": "ReCaptchaV3EnterpriseTaskProxyLess",
-            "websiteURL": SEARCH_URL,
-            "websiteKey": RECAPTCHA_SITE_KEY,
-            "pageAction": RECAPTCHA_ACTION,
+            "isInvisible": False,
         },
     ]
 

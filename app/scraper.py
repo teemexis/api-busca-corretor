@@ -213,38 +213,54 @@ async def search_broker_by_cpf(cpf: str) -> dict:
         from app.http_search import search_broker_by_cpf_http
 
         logger.info("Usando captcha solver para CPF %s", formatted_cpf)
+        max_solver_attempts = max(3, _max_attempts())
 
         async with _browser_lock:
             async with async_playwright() as playwright:
-                async for solution in iter_captcha_solutions():
-                    logger.info("Testando token via HTTP")
-                    try:
-                        result = await search_broker_by_cpf_http(
-                            formatted_cpf, solution=solution
-                        )
-                        if result.get("found"):
-                            return result
-                    except Exception as exc:
-                        logger.warning("HTTP com token falhou: %s", exc)
-
-                    for headless in (_default_headless(), not _default_headless()):
-                        logger.info(
-                            "Testando token via Playwright (headless=%s)", headless
-                        )
+                for attempt in range(1, max_solver_attempts + 1):
+                    logger.info(
+                        "Rodada captcha solver %s/%s", attempt, max_solver_attempts
+                    )
+                    async for solution in iter_captcha_solutions():
+                        logger.info("Testando token via HTTP")
                         try:
-                            result = await _run_token_attempt(
-                                playwright,
-                                formatted_cpf,
-                                solution.token,
-                                solution.user_agent,
-                                headless=headless,
+                            result = await search_broker_by_cpf_http(
+                                formatted_cpf, solution=solution
                             )
                             if result.get("found"):
                                 return result
-                        except PlaywrightTimeoutError as exc:
-                            logger.warning("Playwright com token timeout: %s", exc)
                         except Exception as exc:
-                            logger.warning("Playwright com token falhou: %s", exc)
+                            logger.warning("HTTP com token falhou: %s", exc)
+
+                        for headless in (_default_headless(), not _default_headless()):
+                            logger.info(
+                                "Testando token via Playwright (headless=%s)", headless
+                            )
+                            try:
+                                result = await _run_token_attempt(
+                                    playwright,
+                                    formatted_cpf,
+                                    solution.token,
+                                    solution.user_agent,
+                                    headless=headless,
+                                )
+                                if result.get("found"):
+                                    return result
+                            except PlaywrightTimeoutError as exc:
+                                logger.warning(
+                                    "Playwright com token timeout: %s", exc
+                                )
+                            except Exception as exc:
+                                logger.warning(
+                                    "Playwright com token falhou: %s", exc
+                                )
+
+                    if attempt < max_solver_attempts:
+                        await asyncio.sleep(attempt * 2)
+
+        if os.getenv("DOCKER", "false").lower() != "true":
+            logger.info("Captcha solver falhou, tentando Playwright nativo")
+            return await _search_broker_with_playwright(formatted_cpf)
 
         return {
             "found": False,
