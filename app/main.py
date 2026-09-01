@@ -1,5 +1,7 @@
 from typing import Union
 
+import logging
+
 from fastapi import FastAPI, HTTPException, Query
 from pydantic import BaseModel, Field
 
@@ -10,6 +12,8 @@ app = FastAPI(
     description="Consulta corretores de imóveis no site do CRECISP por CPF",
     version="1.0.0",
 )
+
+logging.basicConfig(level=logging.INFO)
 
 
 class BrokerSearchRequest(BaseModel):
