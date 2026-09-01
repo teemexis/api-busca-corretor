@@ -68,10 +68,14 @@ Se o EasyPanel usar apenas Dockerfile (sem compose), o Chromium ainda funciona c
 
 ## 6. Domínio e HTTPS
 
-1. No serviço, vá em **Domains**
+1. No serviço, vá em **Domínios**
 2. Adicione seu domínio (ex: `api.seudominio.com.br`)
-3. Ative **HTTPS** (Let's Encrypt automático no EasyPanel)
-4. Aponte o DNS (A record) para o IP da VPS
+3. Configure a **porta alvo (target port): `8000`**
+4. Ative **HTTPS** (Let's Encrypt automático no EasyPanel)
+5. Aponte o DNS (A record) para o IP da VPS
+
+> Se a porta alvo não for `8000`, o EasyPanel fica em loop:
+> `Waiting for service ... to start`
 
 ## 7. Deploy
 

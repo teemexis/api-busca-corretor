@@ -1,9 +1,17 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -e
 
 PORT="${PORT:-8000}"
+export DISPLAY="${DISPLAY:-:99}"
 
-Xvfb "${DISPLAY:-:99}" -screen 0 1280x720x24 -ac +extension GLX +render -noreset &
+echo "[start] DISPLAY=${DISPLAY} PORT=${PORT}"
+
+if ! command -v Xvfb >/dev/null 2>&1; then
+  echo "[start] ERRO: Xvfb nao encontrado"
+  exit 1
+fi
+
+Xvfb "${DISPLAY}" -screen 0 1280x720x24 -ac +extension GLX +render -noreset &
 XVFB_PID=$!
 
 cleanup() {
@@ -12,6 +20,7 @@ cleanup() {
 
 trap cleanup EXIT TERM INT
 
-sleep 2
+sleep 3
 
+echo "[start] Iniciando Uvicorn em 0.0.0.0:${PORT}..."
 exec uvicorn app.main:app --host 0.0.0.0 --port "${PORT}"

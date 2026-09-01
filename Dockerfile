@@ -5,6 +5,7 @@ WORKDIR /app
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PORT=8000 \
+    HOST=0.0.0.0 \
     DISPLAY=:99 \
     DOCKER=true \
     PLAYWRIGHT_HEADLESS=false
@@ -23,7 +24,4 @@ RUN chmod +x ./scripts/start.sh
 
 EXPOSE 8000
 
-HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-    CMD curl -fsS "http://127.0.0.1:${PORT}/health" || exit 1
-
-CMD ["./scripts/start.sh"]
+CMD ["bash", "scripts/start.sh"]
