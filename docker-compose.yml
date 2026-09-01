@@ -1,0 +1,17 @@
+services:
+  api-busca-corretor:
+    build: .
+    container_name: api-busca-corretor
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      PORT: 8000
+      DISPLAY: ":99"
+      DOCKER: "true"
+      PLAYWRIGHT_HEADLESS: "false"
+    shm_size: "1gb"
+    deploy:
+      resources:
+        limits:
+          memory: 2G
