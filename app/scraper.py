@@ -140,6 +140,22 @@ async def _run_single_attempt(
 
 async def search_broker_by_cpf(cpf: str) -> dict:
     formatted_cpf = normalize_cpf(cpf)
+
+    if os.getenv("TWOCAPTCHA_API_KEY"):
+        from app.http_search import search_broker_by_cpf_http
+
+        logger.info("Usando busca HTTP com 2Captcha para CPF %s", formatted_cpf)
+        try:
+            return await search_broker_by_cpf_http(formatted_cpf)
+        except Exception as exc:
+            logger.warning("Busca HTTP falhou: %s", exc)
+            if os.getenv("DOCKER", "false").lower() != "true":
+                logger.info("Tentando fallback Playwright")
+
+    return await _search_broker_with_playwright(formatted_cpf)
+
+
+async def _search_broker_with_playwright(formatted_cpf: str) -> dict:
     headless_modes = [_default_headless()]
     if headless_modes[0]:
         headless_modes.append(False)
